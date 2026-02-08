@@ -1,600 +1,631 @@
 ---
-name: aws-waf-skill
-description: AWS WAF (Web Application Firewall) configuration, rule management, and security best practices for protecting web applications
+name: aws-well-architected-framework
+description: Use when reviewing AWS architecture, designing cloud systems, addressing operational issues, security concerns, reliability problems, performance bottlenecks, cost overruns, or sustainability goals
 ---
 
-# AWS WAF Skill
+# AWS Well-Architected Framework
 
-Expert guidance for AWS Web Application Firewall (WAF) configuration, rule management, security best practices, and integration with AWS services.
+Expert guidance for designing, reviewing, and improving AWS architectures using the six pillars of the Well-Architected Framework.
 
 ## When to Use
 
 Use this skill when:
 
-- Configuring AWS WAF for CloudFront, ALB, API Gateway, or AppSync
-- Creating or managing WAF rules, rule groups, and web ACLs
-- Implementing protection against common web exploits (OWASP Top 10)
-- Setting up rate limiting and bot protection
-- Analyzing WAF logs and metrics
-- Troubleshooting WAF rule issues or false positives
-- Migrating from AWS WAF Classic to WAF v2
-- Integrating WAF with other AWS security services
+- Reviewing existing AWS architecture for best practices
+- Designing new cloud systems or applications
+- Troubleshooting operational issues, security vulnerabilities, or reliability problems
+- Optimizing costs or improving performance
+- Preparing for architecture reviews or audits
+- Migrating workloads to AWS
+- Addressing compliance or sustainability requirements
+- User asks "is my architecture good?" or "how can I improve my AWS setup?"
 
-## Core Concepts
+## Core Principle
 
-### WAF Components
+**Systematic architecture evaluation across 6 pillars ensures balanced, well-designed systems that meet business objectives.**
 
-1. **Web ACL** - Container for rules that inspect web requests
-2. **Rules** - Logic to inspect requests (match conditions + action)
-3. **Rule Groups** - Collection of reusable rules
-4. **IP Sets** - Collection of IP addresses and CIDR ranges
-5. **Regex Pattern Sets** - Reusable regex patterns for matching
+The AWS Well-Architected Framework provides a consistent approach for evaluating cloud architectures and implementing scalable designs.
 
-### Actions
+## The Six Pillars
 
-- **Allow** - Forward the request
-- **Block** - Return HTTP 403 response
-- **Count** - Count the request but don't take action (testing mode)
-- **CAPTCHA** - Challenge with CAPTCHA
-- **Challenge** - Silent JavaScript challenge
+| Pillar | Focus | Key Question |
+|--------|-------|--------------|
+| **Operational Excellence** | Run and monitor systems | How do we operate effectively? |
+| **Security** | Protect information and systems | How do we protect data and resources? |
+| **Reliability** | Recover from failures | How do we ensure workload availability? |
+| **Performance Efficiency** | Use resources effectively | How do we meet performance requirements? |
+| **Cost Optimization** | Avoid unnecessary costs | How do we achieve cost-effective outcomes? |
+| **Sustainability** | Minimize environmental impact | How do we reduce carbon footprint? |
 
-## Best Practices
+## Architecture Review Workflow
 
-### 1. Start with AWS Managed Rules
+**CRITICAL: You MUST review ALL 6 pillars systematically. Never skip a pillar because it "seems not applicable" - every workload has considerations across all pillars.**
 
-Always begin with AWS Managed Rule Groups as a foundation:
+```dot
+digraph review_flow {
+    "Architecture review needed" [shape=doublecircle];
+    "Identify workload scope" [shape=box];
+    "Review each pillar systematically" [shape=box];
+    "Document findings per pillar" [shape=box];
+    "Prioritize improvements" [shape=box];
+    "Create action plan" [shape=box];
+    "All pillars reviewed?" [shape=diamond];
+    "Complete" [shape=doublecircle];
 
-```
-- Core Rule Set (CRS) - OWASP Top 10 protection
-- Known Bad Inputs - Known malicious patterns
-- SQL Database - SQL injection protection
-- Linux Operating System - Linux-specific exploits
-- POSIX Operating System - POSIX-specific exploits
-```
-
-### 2. Use Count Mode for Testing
-
-When adding new rules:
-1. Set action to `Count` initially
-2. Monitor CloudWatch metrics and logs
-3. Tune for false positives
-4. Switch to `Block` after validation
-
-### 3. Implement Defense in Depth
-
-Layer your protection:
-
-```
-Priority Order:
-1. Rate limiting (prevent DoS)
-2. IP reputation (block known bad actors)
-3. Geo-blocking (if applicable)
-4. AWS Managed Rules (OWASP protection)
-5. Custom rules (application-specific)
-6. Allow rules (whitelist trusted sources)
-```
-
-### 4. Rate Limiting Strategy
-
-Implement tiered rate limits:
-
-```
-- Global rate limit: 2000 requests per 5 minutes per IP
-- Login endpoint: 5 requests per minute per IP
-- API endpoints: 100 requests per minute per IP
-- Search endpoints: 20 requests per minute per IP
-```
-
-### 5. Logging and Monitoring
-
-Always enable:
-- **WAF logging** to S3, CloudWatch Logs, or Kinesis
-- **CloudWatch metrics** for monitoring
-- **Alarming** on blocked requests threshold
-- **Log sampling** if cost is a concern (minimum 10%)
-
-## Common Patterns
-
-### Pattern 1: CloudFront + WAF
-
-```typescript
-// CDK Example
-import * as wafv2 from 'aws-cdk-lib/aws-wafv2';
-import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
-
-const webAcl = new wafv2.CfnWebACL(this, 'WebAcl', {
-  scope: 'CLOUDFRONT', // Must be CLOUDFRONT for CloudFront
-  defaultAction: { allow: {} },
-  rules: [
-    {
-      name: 'AWS-AWSManagedRulesCommonRuleSet',
-      priority: 1,
-      statement: {
-        managedRuleGroupStatement: {
-          vendorName: 'AWS',
-          name: 'AWSManagedRulesCommonRuleSet',
-        },
-      },
-      overrideAction: { none: {} },
-      visibilityConfig: {
-        sampledRequestsEnabled: true,
-        cloudWatchMetricsEnabled: true,
-        metricName: 'AWS-AWSManagedRulesCommonRuleSet',
-      },
-    },
-  ],
-  visibilityConfig: {
-    sampledRequestsEnabled: true,
-    cloudWatchMetricsEnabled: true,
-    metricName: 'WebAcl',
-  },
-});
-
-const distribution = new cloudfront.Distribution(this, 'Distribution', {
-  // ... other config
-  webAclId: webAcl.attrArn,
-});
-```
-
-### Pattern 2: ALB + WAF
-
-```typescript
-// For ALB, scope must be REGIONAL
-const webAcl = new wafv2.CfnWebACL(this, 'AlbWebAcl', {
-  scope: 'REGIONAL',
-  defaultAction: { allow: {} },
-  // ... rules
-});
-
-const association = new wafv2.CfnWebACLAssociation(this, 'WebAclAssociation', {
-  resourceArn: loadBalancer.loadBalancerArn,
-  webAclArn: webAcl.attrArn,
-});
-```
-
-### Pattern 3: Rate Limiting Rule
-
-```typescript
-{
-  name: 'RateLimitRule',
-  priority: 0,
-  statement: {
-    rateBasedStatement: {
-      limit: 2000,
-      aggregateKeyType: 'IP',
-    },
-  },
-  action: { block: {} },
-  visibilityConfig: {
-    sampledRequestsEnabled: true,
-    cloudWatchMetricsEnabled: true,
-    metricName: 'RateLimitRule',
-  },
+    "Architecture review needed" -> "Identify workload scope";
+    "Identify workload scope" -> "Review each pillar systematically";
+    "Review each pillar systematically" -> "Document findings per pillar";
+    "Document findings per pillar" -> "All pillars reviewed?";
+    "All pillars reviewed?" -> "Review each pillar systematically" [label="no"];
+    "All pillars reviewed?" -> "Prioritize improvements" [label="yes"];
+    "Prioritize improvements" -> "Create action plan";
+    "Create action plan" -> "Complete";
 }
 ```
 
-### Pattern 4: Geo-Blocking
+**Red Flags - You're Skipping the Framework:**
+- "This pillar doesn't apply to this workload" - WRONG, every pillar applies
+- Jumping straight to recommendations without documenting current state
+- Only reviewing 3-4 pillars instead of all 6
+- Providing generic advice instead of workload-specific assessment
 
+## Pillar 1: Operational Excellence
+
+**Goal:** Support development and run workloads effectively, gain insight into operations, and continuously improve processes.
+
+### Design Principles
+
+- Perform operations as code (IaC)
+- Make frequent, small, reversible changes
+- Refine operations procedures frequently
+- Anticipate failure
+- Learn from operational events and failures
+
+### Key Areas
+
+**Organization:**
+- How do teams share architecture knowledge?
+- Are there clear ownership and accountability models?
+
+**Prepare:**
+- How do you design workloads for observability?
+- Infrastructure as code implementation?
+- Deployment practices (CI/CD)?
+
+**Operate:**
+- What's the runbook for common operations?
+- How do you understand workload health?
+- How do you respond to events?
+
+**Evolve:**
+- How do you learn from operational events?
+- Process for continuous improvement?
+
+### Common Issues & Solutions
+
+| Issue | Solution |
+|-------|----------|
+| Manual deployments | Implement CI/CD with CloudFormation/CDK/Terraform |
+| No visibility into system health | Add CloudWatch dashboards, metrics, alarms |
+| Operational procedures outdated | Regular runbook reviews, post-incident learning |
+| Slow incident response | Create automated remediation with Lambda/Systems Manager |
+
+### Quick Implementation Checklist
+
+- [ ] Infrastructure defined as code (CloudFormation/CDK/Terraform)
+- [ ] CI/CD pipeline implemented
+- [ ] CloudWatch dashboards for key metrics
+- [ ] Alarms for critical thresholds
+- [ ] Runbooks documented and accessible
+- [ ] Regular game days to test procedures
+- [ ] Post-incident review process
+
+## Pillar 2: Security
+
+**Goal:** Protect data, systems, and assets through cloud security practices.
+
+### Design Principles
+
+- Implement strong identity foundation
+- Enable traceability
+- Apply security at all layers
+- Automate security best practices
+- Protect data in transit and at rest
+- Keep people away from data
+- Prepare for security events
+
+### Key Areas
+
+**Security Foundations:**
+- How do you manage credentials and authentication?
+- IAM roles and policies following least privilege?
+
+**Identity and Access Management:**
+- How do you manage identities for people and machines?
+- MFA enabled for all human access?
+
+**Detection:**
+- How do you detect and investigate security events?
+- CloudTrail, GuardDuty, Security Hub configured?
+
+**Infrastructure Protection:**
+- How do you protect networks and compute?
+- VPC configuration, security groups, NACLs?
+
+**Data Protection:**
+- How do you classify and protect data?
+- Encryption at rest and in transit?
+
+**Incident Response:**
+- How do you respond to security incidents?
+- Incident response plan tested?
+
+### Critical Security Patterns
+
+**Never Do:**
 ```typescript
-{
-  name: 'GeoBlockRule',
-  priority: 2,
-  statement: {
-    geoMatchStatement: {
-      countryCodes: ['CN', 'RU', 'KP'], // Example countries
-    },
-  },
-  action: { block: {} },
-  visibilityConfig: {
-    sampledRequestsEnabled: true,
-    cloudWatchMetricsEnabled: true,
-    metricName: 'GeoBlockRule',
-  },
-}
-```
-
-### Pattern 5: IP Whitelist
-
-```typescript
-// Create IP Set
-const ipSet = new wafv2.CfnIPSet(this, 'AllowedIPs', {
-  scope: 'CLOUDFRONT',
-  ipAddressVersion: 'IPV4',
-  addresses: [
-    '203.0.113.0/24',
-    '198.51.100.42/32',
-  ],
-});
-
-// Reference in rule
-{
-  name: 'AllowKnownIPs',
-  priority: 0,
-  statement: {
-    ipSetReferenceStatement: {
-      arn: ipSet.attrArn,
-    },
-  },
-  action: { allow: {} },
-  visibilityConfig: {
-    sampledRequestsEnabled: true,
-    cloudWatchMetricsEnabled: true,
-    metricName: 'AllowKnownIPs',
-  },
-}
-```
-
-### Pattern 6: Bot Protection
-
-```typescript
-{
-  name: 'AWS-AWSManagedRulesBotControlRuleSet',
-  priority: 3,
-  statement: {
-    managedRuleGroupStatement: {
-      vendorName: 'AWS',
-      name: 'AWSManagedRulesBotControlRuleSet',
-    },
-  },
-  overrideAction: { none: {} },
-  visibilityConfig: {
-    sampledRequestsEnabled: true,
-    cloudWatchMetricsEnabled: true,
-    metricName: 'BotControl',
-  },
-}
-```
-
-## Rule Priority Guidelines
-
-Lower number = higher priority. Structure priorities as:
-
-```
-0-99:    IP whitelists and allow rules
-100-199: Rate limiting
-200-299: Geo-blocking
-300-399: IP reputation/blocklists
-400-499: AWS Managed Rules
-500-599: Custom application rules
-600-999: Logging/counting rules
-```
-
-## Troubleshooting False Positives
-
-### Step 1: Identify the Blocking Rule
-
-Check WAF logs for:
-- `ruleId` - Which rule blocked the request
-- `action` - The action taken
-- `httpRequest` - Request details
-
-### Step 2: Common False Positive Scenarios
-
-**SQL Injection Rules**: May block legitimate requests with SQL-like syntax
-```
-Solution: Use scope-down statements or excluded rules
-```
-
-**XSS Rules**: May block HTML content submissions
-```
-Solution: Exclude specific paths (e.g., /admin/content-editor)
-```
-
-**Size Constraints**: May block large file uploads
-```
-Solution: Adjust body size limits or exclude upload endpoints
-```
-
-### Step 3: Create Exceptions
-
-```typescript
-{
-  name: 'AWS-AWSManagedRulesCommonRuleSet',
-  priority: 1,
-  statement: {
-    managedRuleGroupStatement: {
-      vendorName: 'AWS',
-      name: 'AWSManagedRulesCommonRuleSet',
-      excludedRules: [
-        { name: 'SizeRestrictions_BODY' },
-        { name: 'GenericRFI_BODY' },
-      ],
-    },
-  },
-  overrideAction: { none: {} },
-  // ... visibility config
-}
-```
-
-Or use scope-down statements:
-
-```typescript
-{
-  name: 'ManagedRulesWithException',
-  statement: {
-    managedRuleGroupStatement: {
-      vendorName: 'AWS',
-      name: 'AWSManagedRulesCommonRuleSet',
-      scopeDownStatement: {
-        notStatement: {
-          statement: {
-            byteMatchStatement: {
-              searchString: '/api/upload',
-              fieldToMatch: { uriPath: {} },
-              textTransformations: [{ priority: 0, type: 'NONE' }],
-              positionalConstraint: 'STARTS_WITH',
-            },
-          },
-        },
-      },
-    },
-  },
-  // ... rest of config
-}
-```
-
-## Cost Optimization
-
-### Tips to Reduce Costs
-
-1. **Use Log Sampling**: Set to 10-25% instead of 100%
-2. **Rule Consolidation**: Combine similar rules when possible
-3. **Regional Replication**: Don't replicate Web ACLs unnecessarily
-4. **Managed Rule Groups**: More cost-effective than custom rules for common protections
-5. **Archive Old Logs**: Move S3 logs to Glacier after 30 days
-
-### Pricing Awareness
-
-- Web ACL: $5/month
-- Rules: $1/month per rule
-- Requests: $0.60 per 1M requests
-- Bot Control: Additional $10/month + $1 per 1M requests
-- CAPTCHA: $0.40 per 1,000 challenge attempts
-
-## Security Checklist
-
-- [ ] Enable WAF logging (S3 or CloudWatch Logs)
-- [ ] Implement rate limiting on all public endpoints
-- [ ] Use AWS Managed Rules for OWASP protection
-- [ ] Enable CloudWatch alarms for blocked requests
-- [ ] Test rules in Count mode before blocking
-- [ ] Document all custom rules and their purpose
-- [ ] Review and update rules quarterly
-- [ ] Set up IP whitelists for trusted sources
-- [ ] Enable bot protection for user-facing applications
-- [ ] Configure appropriate default action (typically Block for sensitive apps)
-- [ ] Use regex pattern sets for sensitive data patterns
-- [ ] Implement geo-blocking if applicable
-- [ ] Create runbook for handling false positives
-
-## Common Gotchas
-
-1. **CloudFront WAF must use CLOUDFRONT scope** (us-east-1 only)
-2. **ALB/API Gateway must use REGIONAL scope** (in the resource's region)
-3. **Rule priorities must be unique** within a Web ACL
-4. **Managed Rules require overrideAction**, custom rules need action
-5. **Rate limits are per Web ACL**, not per rule
-6. **CAPTCHA/Challenge require JavaScript** enabled in browsers
-7. **Changes can take up to 1 minute** to propagate globally
-
-## Integration Points
-
-### With CloudWatch
-
-```typescript
-// Create alarm for high block rate
-new cloudwatch.Alarm(this, 'HighBlockRate', {
-  metric: new cloudwatch.Metric({
-    namespace: 'AWS/WAFV2',
-    metricName: 'BlockedRequests',
-    dimensionsMap: {
-      WebACL: webAcl.attrArn,
-      Rule: 'ALL',
-      Region: 'us-east-1',
-    },
-    statistic: 'Sum',
-    period: Duration.minutes(5),
-  }),
-  threshold: 1000,
-  evaluationPeriods: 2,
-  comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
+// ❌ DANGEROUS: Hardcoded credentials
+const AWS = require('aws-sdk');
+const s3 = new AWS.S3({
+  accessKeyId: 'AKIAIOSFODNN7EXAMPLE',
+  secretAccessKey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY'
 });
 ```
 
-### With AWS Firewall Manager
+**Always Do:**
+```typescript
+// ✅ CORRECT: Use IAM roles
+const AWS = require('aws-sdk');
+const s3 = new AWS.S3(); // Credentials from IAM role
 
-Use for centralized WAF management across multiple accounts and regions.
+// Lambda function with IAM role
+const lambda = new lambda.Function(this, 'MyFunction', {
+  // IAM role with least privilege
+  role: myRole,
+  // ...
+});
+```
 
-### With AWS Shield Advanced
+### Security Checklist
 
-Combine with Shield Advanced for DDoS protection and cost protection guarantees.
+- [ ] No hardcoded credentials anywhere (check git history!)
+- [ ] IAM roles follow least privilege principle
+- [ ] MFA enabled for root and privileged accounts
+- [ ] CloudTrail enabled in all regions
+- [ ] VPC with proper public/private subnet architecture
+- [ ] Security groups with minimal inbound rules
+- [ ] Encryption at rest for all data stores
+- [ ] HTTPS/TLS for all data in transit
+- [ ] Secrets Manager or Parameter Store for secrets
+- [ ] Regular security patching process
+- [ ] AWS Config for compliance monitoring
+- [ ] GuardDuty for threat detection
 
-### With AWS Security Hub
+## Pillar 3: Reliability
 
-Integrate findings for centralized security monitoring.
+**Goal:** Ensure workload performs its intended function correctly and consistently.
 
-## Migration from WAF Classic
+### Design Principles
 
-Key differences:
-- v2 uses JSON-based rule syntax
-- Capacity units (WCU) replaced rule limits
-- New features: CAPTCHA, Challenge, label matching
-- Improved rule testing with Count mode
+- Automatically recover from failure
+- Test recovery procedures
+- Scale horizontally
+- Stop guessing capacity
+- Manage change through automation
 
-Migration steps:
-1. Review existing Classic rules
-2. Create v2 Web ACL with equivalent rules
-3. Test in Count mode
-4. Switch traffic to v2 Web ACL
-5. Monitor and tune
-6. Decommission Classic Web ACL
+### Key Areas
+
+**Foundations:**
+- How do you manage service quotas and constraints?
+- Network topology designed for HA?
+
+**Workload Architecture:**
+- How do you design workload service architecture?
+- Microservices vs monolith considerations?
+
+**Change Management:**
+- How do you monitor workload resources?
+- How are changes deployed safely?
+
+**Failure Management:**
+- How do you back up data?
+- How do you design for resilience?
+- DR plan and RTO/RPO defined?
+
+### High Availability Patterns
+
+**Multi-AZ Deployment:**
+```
+Region
+├── AZ-1: Application + Database
+├── AZ-2: Application + Database (standby)
+└── AZ-3: Application + Database (standby)
+```
+
+**Multi-Region Deployment:**
+```
+Primary Region          Secondary Region
+├── Active workload    ├── Standby/Active
+├── Database (primary) ├── Database (replica)
+└── Route 53 health check monitoring
+```
+
+### Backup Strategy
+
+| Data Type | Solution | RPO | RTO |
+|-----------|----------|-----|-----|
+| **RDS** | Automated backups + snapshots | < 5 min | < 30 min |
+| **DynamoDB** | Point-in-time recovery | Seconds | Minutes |
+| **S3** | Versioning + cross-region replication | Real-time | Immediate |
+| **EBS** | Snapshots via AWS Backup | Hours | Hours |
+
+### Reliability Checklist
+
+- [ ] Multi-AZ deployment for critical components
+- [ ] Health checks configured (ELB, Route 53)
+- [ ] Auto Scaling groups with proper sizing
+- [ ] RDS automated backups enabled
+- [ ] DynamoDB point-in-time recovery enabled
+- [ ] S3 versioning for critical buckets
+- [ ] Disaster recovery plan documented and tested
+- [ ] Chaos engineering tests (failure injection)
+- [ ] Graceful degradation strategies
+- [ ] Circuit breaker patterns implemented
+
+## Pillar 4: Performance Efficiency
+
+**Goal:** Use computing resources efficiently to meet requirements and maintain efficiency as demand changes.
+
+### Design Principles
+
+- Democratize advanced technologies
+- Go global in minutes
+- Use serverless architectures
+- Experiment more often
+- Consider mechanical sympathy
+
+### Key Areas
+
+**Selection:**
+- How do you select appropriate resource types and sizes?
+- Compute: EC2, Lambda, Fargate, ECS, EKS?
+- Database: RDS, DynamoDB, Aurora, ElastiCache?
+- Storage: S3, EFS, EBS, Glacier?
+
+**Review:**
+- How do you evolve workload to use new resources?
+- Regular review of AWS new features?
+
+**Monitoring:**
+- How do you monitor resources?
+- CloudWatch, X-Ray for distributed tracing?
+
+**Trade-offs:**
+- How do you use trade-offs to improve performance?
+- Caching, consistency models, compression?
+
+### Performance Patterns
+
+**Caching Strategy:**
+```
+Client → CloudFront (edge cache)
+  → API Gateway
+    → Lambda
+      → ElastiCache (data cache)
+        → DynamoDB/RDS
+```
+
+**Database Selection:**
+
+| Use Case | Recommended Service |
+|----------|-------------------|
+| Relational, complex queries | RDS (PostgreSQL/MySQL) |
+| High throughput, simple queries | DynamoDB |
+| Graph relationships | Neptune |
+| Search and analytics | OpenSearch |
+| Time-series data | Timestream |
+| In-memory cache | ElastiCache (Redis/Memcached) |
+
+### Performance Checklist
+
+- [ ] Right-sized compute instances (not over-provisioned)
+- [ ] Content delivery through CloudFront
+- [ ] Database read replicas for read-heavy workloads
+- [ ] Caching layer (ElastiCache, DAX, CloudFront)
+- [ ] Asynchronous processing with SQS/SNS/EventBridge
+- [ ] Auto Scaling configured appropriately
+- [ ] Database indexes optimized
+- [ ] Monitoring with CloudWatch and X-Ray
+- [ ] Regular performance testing under load
+
+## Pillar 5: Cost Optimization
+
+**Goal:** Run systems to deliver business value at lowest price point.
+
+### Design Principles
+
+- Implement cloud financial management
+- Adopt consumption model
+- Measure overall efficiency
+- Stop spending on undifferentiated heavy lifting
+- Analyze and attribute expenditure
+
+### Key Areas
+
+**Practice Cloud Financial Management:**
+- Cost allocation tags implemented?
+- Budgets and alerts configured?
+
+**Expenditure and Usage Awareness:**
+- How do you govern usage?
+- Cost Explorer and AWS Budgets configured?
+
+**Cost-Effective Resources:**
+- How do you evaluate cost when selecting services?
+- Reserved Instances or Savings Plans for predictable workloads?
+
+**Manage Demand:**
+- How do you manage demand and supply resources?
+- Throttling, caching to reduce demand?
+
+**Optimize Over Time:**
+- How do you evaluate new services?
+- Regular review of cost optimization opportunities?
+
+### Cost Optimization Strategies
+
+| Strategy | Implementation | Potential Savings |
+|----------|---------------|-------------------|
+| **Right-sizing** | Use Compute Optimizer recommendations | 20-40% |
+| **Reserved Instances** | 1-year or 3-year commitments | 30-75% |
+| **Savings Plans** | Flexible compute commitments | 30-70% |
+| **Spot Instances** | Fault-tolerant workloads | 50-90% |
+| **S3 Intelligent-Tiering** | Automatic storage class optimization | 40-60% |
+| **Auto Scaling** | Scale resources with demand | 30-50% |
+| **Lambda instead of EC2** | For appropriate workloads | Varies |
+
+### Cost Monitoring
+
+```typescript
+// CDK Example: Set up budget alerts
+import * as budgets from 'aws-cdk-lib/aws-budgets';
+
+new budgets.CfnBudget(this, 'MonthlyBudget', {
+  budget: {
+    budgetType: 'COST',
+    timeUnit: 'MONTHLY',
+    budgetLimit: {
+      amount: 1000,
+      unit: 'USD',
+    },
+  },
+  notificationsWithSubscribers: [{
+    notification: {
+      notificationType: 'ACTUAL',
+      comparisonOperator: 'GREATER_THAN',
+      threshold: 80, // Alert at 80%
+    },
+    subscribers: [{
+      subscriptionType: 'EMAIL',
+      address: 'team@example.com',
+    }],
+  }],
+});
+```
+
+### Cost Optimization Checklist
+
+- [ ] Cost allocation tags applied consistently
+- [ ] AWS Budgets configured with alerts
+- [ ] Cost Explorer reviewed monthly
+- [ ] Reserved Instances or Savings Plans for stable workloads
+- [ ] Spot Instances for fault-tolerant workloads
+- [ ] Unused resources identified and terminated
+- [ ] S3 lifecycle policies for data management
+- [ ] Right-sized instances (not over-provisioned)
+- [ ] Lambda memory optimization
+- [ ] DynamoDB on-demand vs provisioned analysis
+- [ ] Data transfer costs analyzed and optimized
+
+## Pillar 6: Sustainability
+
+**Goal:** Minimize environmental impact of running cloud workloads.
+
+### Design Principles
+
+- Understand your impact
+- Establish sustainability goals
+- Maximize utilization
+- Anticipate and adopt new, more efficient offerings
+- Use managed services
+- Reduce downstream impact
+
+### Key Areas
+
+**Region Selection:**
+- Choose regions with renewable energy
+- AWS regions with lower carbon intensity
+
+**User Behavior Patterns:**
+- Scale resources with demand
+- Remove unused resources
+
+**Software and Architecture:**
+- Optimize code for efficiency
+- Use appropriate services (serverless over provisioned)
+
+**Data Patterns:**
+- Minimize data movement
+- Use data compression
+- Implement lifecycle policies
+
+**Hardware Patterns:**
+- Use minimum necessary hardware
+- Use instance types with best performance per watt
+
+**Development Process:**
+- Test sustainability improvements
+- Measure and report carbon footprint
+
+### Sustainability Checklist
+
+- [ ] Workloads in regions with renewable energy
+- [ ] Auto Scaling to match demand (no idle resources)
+- [ ] Unused resources regularly cleaned up
+- [ ] Graviton processors considered for better efficiency
+- [ ] Managed services used where appropriate
+- [ ] Data lifecycle policies to reduce storage
+- [ ] Efficient code (async processing, optimized queries)
+- [ ] Monitoring resource utilization
+- [ ] Carbon footprint tracked (AWS Customer Carbon Footprint Tool)
+
+## Review Process
+
+### 1. Scoping Phase
+
+**Questions to ask:**
+- What is the workload scope? (entire system vs specific component)
+- What are the business objectives?
+- What are the compliance requirements?
+- What are the current pain points?
+
+### 2. Review Each Pillar
+
+For each pillar, use this template:
+
+**Current State:**
+- Document what exists today
+
+**Gaps:**
+- What's missing or needs improvement?
+
+**Risks:**
+- What are the high/medium/low priority risks?
+
+**Recommendations:**
+- Specific, actionable improvements
+
+### 3. Prioritization Matrix
+
+| Priority | Criteria |
+|----------|----------|
+| **High** | Security vulnerabilities, critical availability risks, major cost waste |
+| **Medium** | Performance issues, moderate cost optimization, operational improvements |
+| **Low** | Nice-to-haves, future considerations, minor optimizations |
+
+### 4. Action Plan Template
+
+```markdown
+## Pillar: [Name]
+
+### Issue: [Description]
+- **Risk Level:** High/Medium/Low
+- **Impact:** [Business impact]
+- **Effort:** Low/Medium/High
+
+### Recommendation:
+[Specific actions]
+
+### Implementation Steps:
+1. [Step 1]
+2. [Step 2]
+3. [Step 3]
+
+### Success Criteria:
+- [Measurable outcome 1]
+- [Measurable outcome 2]
+
+### Resources:
+- [AWS documentation links]
+- [Blog posts or examples]
+```
+
+## Common Anti-Patterns
+
+| Anti-Pattern | Issue | Better Approach |
+|--------------|-------|-----------------|
+| **Single AZ deployment** | No fault tolerance | Multi-AZ architecture |
+| **No IaC** | Manual config, drift | CloudFormation/CDK/Terraform |
+| **Hardcoded secrets** | Security vulnerability | Secrets Manager/Parameter Store |
+| **No monitoring** | Blind operation | CloudWatch dashboards + alarms |
+| **No backups** | Data loss risk | Automated backup strategy |
+| **Over-provisioning** | Cost waste | Right-sizing + Auto Scaling |
+| **No cost tracking** | Budget overruns | Tags + Budgets + Cost Explorer |
+| **Monolithic architecture** | Hard to scale | Microservices or serverless |
+
+## Real-World Example
+
+**Scenario:** Serverless API with authentication
+
+**Architecture Review:**
+
+**Operational Excellence:**
+- ✅ Lambda functions deployed via CDK
+- ✅ CloudWatch logs enabled
+- ❌ Missing: Distributed tracing (X-Ray), dashboards
+
+**Security:**
+- ❌ CRITICAL: Hardcoded API keys in Lambda environment variables
+- ✅ API Gateway with IAM authorization
+- ❌ Missing: Secrets Manager, encryption at rest
+
+**Reliability:**
+- ✅ Multi-AZ DynamoDB table
+- ❌ Single region deployment
+- ❌ Missing: Backup strategy, DR plan
+
+**Performance:**
+- ✅ CloudFront for static assets
+- ❌ No caching for API responses
+- ❌ Lambda cold starts not optimized
+
+**Cost:**
+- ❌ DynamoDB provisioned capacity, but traffic is spiky
+- ✅ Lambda usage-based pricing
+- ❌ Missing: Budget alerts, cost allocation tags
+
+**Sustainability:**
+- ✅ Serverless architecture (good utilization)
+- ❌ Unused dev/test resources running 24/7
+
+**Priority Actions:**
+1. **HIGH**: Move API keys to Secrets Manager (Security)
+2. **HIGH**: Implement DynamoDB backups (Reliability)
+3. **MEDIUM**: Add X-Ray tracing (Operational Excellence)
+4. **MEDIUM**: Switch DynamoDB to on-demand (Cost)
+5. **LOW**: Add API Gateway caching (Performance)
 
 ## Resources
 
-- [AWS WAF Developer Guide](https://docs.aws.amazon.com/waf/latest/developerguide/)
-- [AWS Managed Rules List](https://docs.aws.amazon.com/waf/latest/developerguide/aws-managed-rule-groups-list.html)
-- [WAF Pricing](https://aws.amazon.com/waf/pricing/)
-- [WAF Security Automations](https://aws.amazon.com/solutions/implementations/aws-waf-security-automations/)
+- [AWS Well-Architected Framework Whitepaper](https://docs.aws.amazon.com/wellarchitected/latest/framework/welcome.html)
+- [AWS Well-Architected Tool](https://console.aws.amazon.com/wellarchitected) (Interactive reviews)
+- [Well-Architected Labs](https://wellarchitectedlabs.com/)
+- [AWS Architecture Center](https://aws.amazon.com/architecture/)
+- [Sustainability Pillar Whitepaper](https://docs.aws.amazon.com/wellarchitected/latest/sustainability-pillar/sustainability-pillar.html)
 
-## Example: Complete Production Web ACL
+## Common Mistakes When Using This Framework
 
-```typescript
-import * as wafv2 from 'aws-cdk-lib/aws-wafv2';
-import { Construct } from 'constructs';
+| Mistake | Why It's Wrong | Correct Approach |
+|---------|---------------|------------------|
+| "Sustainability doesn't apply to this workload" | Every workload consumes resources and energy | Review all 6 pillars, even if findings are minimal |
+| Skipping current state documentation | Can't measure improvement without baseline | Always document "Current State" before recommendations |
+| Generic recommendations | Not actionable or specific to this workload | Provide specific AWS services, code examples, priorities |
+| No prioritization | Everything seems equally important | Use HIGH/MEDIUM/LOW risk levels, create phased plan |
+| Forgetting about trade-offs | Optimizing one pillar at expense of others | Explicitly call out trade-offs (e.g., multi-region cost vs reliability) |
 
-export class ProductionWebAcl extends Construct {
-  public readonly webAcl: wafv2.CfnWebACL;
+## Using This Skill
 
-  constructor(scope: Construct, id: string) {
-    super(scope, id);
+When conducting architecture reviews:
 
-    // IP whitelist for admin endpoints
-    const adminIpSet = new wafv2.CfnIPSet(this, 'AdminIPs', {
-      scope: 'CLOUDFRONT',
-      ipAddressVersion: 'IPV4',
-      addresses: ['203.0.113.0/24'],
-    });
+1. **Start with context** - understand business objectives and constraints
+2. **Review systematically** - go through all 6 pillars, don't skip ANY
+3. **Document findings** - use consistent format per pillar (Current State → Gaps → Recommendations)
+4. **Prioritize ruthlessly** - security and availability issues first
+5. **Be specific** - actionable recommendations with examples and AWS service names
+6. **Provide resources** - link to AWS docs and examples
+7. **Create action plan** - clear next steps with success criteria and effort estimates
+8. **Call out trade-offs** - be explicit about costs and benefits of each recommendation
 
-    this.webAcl = new wafv2.CfnWebACL(this, 'WebAcl', {
-      scope: 'CLOUDFRONT',
-      defaultAction: { allow: {} },
-      rules: [
-        // Priority 0: Allow admin IPs
-        {
-          name: 'AllowAdminIPs',
-          priority: 0,
-          statement: {
-            andStatement: {
-              statements: [
-                {
-                  ipSetReferenceStatement: {
-                    arn: adminIpSet.attrArn,
-                  },
-                },
-                {
-                  byteMatchStatement: {
-                    searchString: '/admin',
-                    fieldToMatch: { uriPath: {} },
-                    textTransformations: [{ priority: 0, type: 'LOWERCASE' }],
-                    positionalConstraint: 'STARTS_WITH',
-                  },
-                },
-              ],
-            },
-          },
-          action: { allow: {} },
-          visibilityConfig: {
-            sampledRequestsEnabled: true,
-            cloudWatchMetricsEnabled: true,
-            metricName: 'AllowAdminIPs',
-          },
-        },
-        // Priority 100: Global rate limit
-        {
-          name: 'GlobalRateLimit',
-          priority: 100,
-          statement: {
-            rateBasedStatement: {
-              limit: 2000,
-              aggregateKeyType: 'IP',
-            },
-          },
-          action: { block: {} },
-          visibilityConfig: {
-            sampledRequestsEnabled: true,
-            cloudWatchMetricsEnabled: true,
-            metricName: 'GlobalRateLimit',
-          },
-        },
-        // Priority 200: Geo blocking
-        {
-          name: 'GeoBlock',
-          priority: 200,
-          statement: {
-            geoMatchStatement: {
-              countryCodes: ['CN', 'RU'],
-            },
-          },
-          action: { block: {} },
-          visibilityConfig: {
-            sampledRequestsEnabled: true,
-            cloudWatchMetricsEnabled: true,
-            metricName: 'GeoBlock',
-          },
-        },
-        // Priority 400: AWS Managed Rules - Core Rule Set
-        {
-          name: 'AWSManagedRulesCommonRuleSet',
-          priority: 400,
-          statement: {
-            managedRuleGroupStatement: {
-              vendorName: 'AWS',
-              name: 'AWSManagedRulesCommonRuleSet',
-            },
-          },
-          overrideAction: { none: {} },
-          visibilityConfig: {
-            sampledRequestsEnabled: true,
-            cloudWatchMetricsEnabled: true,
-            metricName: 'AWSManagedRulesCommonRuleSet',
-          },
-        },
-        // Priority 401: Known Bad Inputs
-        {
-          name: 'AWSManagedRulesKnownBadInputsRuleSet',
-          priority: 401,
-          statement: {
-            managedRuleGroupStatement: {
-              vendorName: 'AWS',
-              name: 'AWSManagedRulesKnownBadInputsRuleSet',
-            },
-          },
-          overrideAction: { none: {} },
-          visibilityConfig: {
-            sampledRequestsEnabled: true,
-            cloudWatchMetricsEnabled: true,
-            metricName: 'AWSManagedRulesKnownBadInputsRuleSet',
-          },
-        },
-        // Priority 402: Bot Control
-        {
-          name: 'AWSManagedRulesBotControlRuleSet',
-          priority: 402,
-          statement: {
-            managedRuleGroupStatement: {
-              vendorName: 'AWS',
-              name: 'AWSManagedRulesBotControlRuleSet',
-            },
-          },
-          overrideAction: { none: {} },
-          visibilityConfig: {
-            sampledRequestsEnabled: true,
-            cloudWatchMetricsEnabled: true,
-            metricName: 'AWSManagedRulesBotControlRuleSet',
-          },
-        },
-      ],
-      visibilityConfig: {
-        sampledRequestsEnabled: true,
-        cloudWatchMetricsEnabled: true,
-        metricName: 'ProductionWebAcl',
-      },
-    });
-  }
-}
-```
+**Remember:** Architecture is about trade-offs. A perfect architecture doesn't exist - aim for a well-balanced one that meets business needs.
 
-## Instructions for Using This Skill
-
-When AWS WAF tasks arise:
-
-1. **Assess Requirements**: Determine the use case (CloudFront, ALB, API Gateway)
-2. **Choose Scope**: CLOUDFRONT or REGIONAL based on resource
-3. **Start Simple**: Begin with AWS Managed Rules
-4. **Layer Protection**: Add rate limiting, geo-blocking, IP controls as needed
-5. **Test in Count Mode**: Always test before blocking
-6. **Enable Logging**: Configure comprehensive logging from the start
-7. **Monitor & Tune**: Review metrics and logs regularly
-8. **Document**: Keep clear documentation of all custom rules and exceptions
-
-Remember: WAF is about balancing security and usability. Start restrictive, then tune for false positives.
+**No exceptions to reviewing all 6 pillars** - even if a pillar seems "not applicable", document why and what the current state is.
